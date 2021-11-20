@@ -14,34 +14,37 @@ public Plugin myinfo =
 	url = "https://steamcommunity.com/id/ByDexterTR - ByDexter#5494"
 };
 
-ConVar Kredi = null;
-static char Dosya[256];
+ConVar Kredi = null, Flag = null;
+
+char _flag[8];
 
 
 public void OnPluginStart()
 {
 	Kredi = CreateConVar("sm_maas_odul", "5", "Oyuncular maaş yazınca kaç kredi alacak", 0, true, 1.0);
+	Flag = CreateConVar("sm_maas_harf", "b", "Hangi yetki harfi alsın"); Flag.GetString(_flag, 8); Flag.AddChangeHook(Flagget);
 	RegConsoleCmd("sm_maas", Command_Maas);
-	BuildPath(Path_SM, Dosya, sizeof(Dosya), "ByDexter/Yetkilimaas.txt");
 	AutoExecConfig(true, "Yetkili-Maas", "ByDexter");
 }
 
+public void Flagget(ConVar convar, const char[] oldValue, const char[] newValue) { Flag.GetString(_flag, 8); }
+
 public void OnMapStart()
 {
-	PrecacheSoundAny("ByDexter/maas/nah.mp3");
-	AddFileToDownloadsTable("sound/ByDexter/maas/nah.mp3");
 	PrecacheSoundAny("ByDexter/maas/maas.mp3");
 	AddFileToDownloadsTable("sound/ByDexter/maas/maas.mp3");
 }
 
 public void OnClientPostAdminCheck(int client)
 {
-	if (GetUserAdmin(client) != INVALID_ADMIN_ID)
+	if (CheckAdminFlag(client, _flag))
 	{
+		char Dosya[256];
+		BuildPath(Path_SM, Dosya, sizeof(Dosya), "ByDexter/Yetkilimaas.txt");
 		KeyValues kv = new KeyValues("ByDexter");
 		kv.ImportFromFile(Dosya);
-		char steamid[128];
-		GetClientAuthId(client, AuthId_Steam2, steamid, 128);
+		char steamid[32];
+		GetClientAuthId(client, AuthId_Steam2, steamid, 32);
 		if (kv.JumpToKey(steamid, true))
 		{
 			char Time[20];
@@ -65,18 +68,20 @@ public void OnClientPostAdminCheck(int client)
 
 public Action Command_Maas(int client, int args)
 {
-	if (GetUserAdmin(client) != INVALID_ADMIN_ID)
+	if (CheckAdminFlag(client, _flag))
 	{
+		char Dosya[256];
+		BuildPath(Path_SM, Dosya, sizeof(Dosya), "ByDexter/Yetkilimaas.txt");
 		KeyValues kv = new KeyValues("ByDexter");
 		kv.ImportFromFile(Dosya);
-		char steamid[128];
-		GetClientAuthId(client, AuthId_Steam2, steamid, 128);
+		char steamid[32];
+		GetClientAuthId(client, AuthId_Steam2, steamid, 32);
 		if (kv.JumpToKey(steamid, true))
 		{
-			char Time[20];
-			FormatTime(Time, 20, "%j", GetTime());
-			char Sonalis[20];
-			kv.GetString("last", Sonalis, 20, "none");
+			char Time[16];
+			FormatTime(Time, 16, "%F", GetTime());
+			char Sonalis[16];
+			kv.GetString("last", Sonalis, 16, "none");
 			if (strcmp(Sonalis, "none") == 0)
 			{
 				EmitSoundToClientAny(client, "ByDexter/maas/maas.mp3", SOUND_FROM_PLAYER, 1, 100);
@@ -84,7 +89,7 @@ public Action Command_Maas(int client, int args)
 				Store_SetClientCredits(client, Store_GetClientCredits(client) + Kredi.IntValue);
 				PrintToChat(client, "[SM] \x01İlk maaşın hayırlı olsun, \x04%d Kredi", Kredi.IntValue);
 			}
-			else if (StringToInt(Sonalis) == StringToInt(Time))
+			else if (strcmp(Sonalis, Time) == 0)
 			{
 				EmitSoundToClientAny(client, "ByDexter/maas/nah.mp3", SOUND_FROM_PLAYER, 1, 100);
 				ReplyToCommand(client, "[SM] Bugün zaten maaşını almışsın.");
@@ -108,4 +113,23 @@ public Action Command_Maas(int client, int args)
 		ReplyToCommand(client, "[SM] Bu komutu kullanmak için yetkili olmalısın.");
 		return Plugin_Handled;
 	}
+}
+
+bool CheckAdminFlag(int client, const char[] flags)
+{
+	int iCount = 0;
+	char sflagNeed[22][8], sflagFormat[64];
+	bool bEntitled = false;
+	Format(sflagFormat, sizeof(sflagFormat), flags);
+	ReplaceString(sflagFormat, sizeof(sflagFormat), " ", "");
+	iCount = ExplodeString(sflagFormat, ",", sflagNeed, sizeof(sflagNeed), sizeof(sflagNeed[]));
+	for (int i = 0; i < iCount; i++)
+	{
+		if ((GetUserFlagBits(client) & ReadFlagString(sflagNeed[i])) || (GetUserFlagBits(client) & ADMFLAG_ROOT))
+		{
+			bEntitled = true;
+			break;
+		}
+	}
+	return bEntitled;
 } 
